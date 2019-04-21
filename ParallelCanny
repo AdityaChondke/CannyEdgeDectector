@@ -7,6 +7,8 @@ import time
 import math
 
 
+limit = input("Input image threshold for edge detector(Higher=less sensitive):")
+int_limit = int(limit)
 
 def gaussian(image):
     fil=np.array([[1/16,1/8,1/16],[1/8,1/4,1/8],[1/16,1/8,1/16]])
@@ -157,10 +159,10 @@ def thres(image):
             sthre[i][j]=0
             tthre[i][j]=0
             
-            if(image[i][j]>91 ):
+            if(image[i][j]>int_limit ):
                 sthre[i][j]=1
                 tthre[i][j]=2
-            elif(image[i][j]<91 and image[i][j]>20 ):
+            elif(image[i][j]<int_limit and image[i][j]>20 ):
                 tthre[i][j]=1
             
     return(sthre,tthre)
