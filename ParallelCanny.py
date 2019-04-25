@@ -6,7 +6,7 @@ import time
 import math
 
 
-limit = input("Input image threshold for edge detector(Higher=less sensitive):")
+limit = 50#input("Input image threshold for edge detector(Higher=less sensitive):")
 int_limit = int(limit)
 
 
@@ -96,18 +96,18 @@ def gradient_cuda(image, image_out2, image_out3, gx, gy):
     hf2=hf//2
     wf2=wf//2
     i, j = cuda.grid(2)
-    if hf2 <= i and i<= h-hf2 and wf2<=j and j<=w-wf2:
-        tsumx=0.0
-        tsumy=0.0
+    if hf2 < i and i< h-hf2 and wf2<j and j<w-wf2:
+        tsumx=0
+        tsumy=0
         for ii in range(hf):
             for jj in range(wf):
                 tsumx=tsumx+(image[i-hf2+ii,j-wf2+jj]*gx[hf-1-ii,wf-1-jj])
                 tsumy=tsumy+(image[i-hf2+ii,j-wf2+jj]*gy[hf-1-ii,wf-1-jj])
         
                 
-        image_out2[i][j]=((tsumx*tsumx)+(tsumy*tsumy))**0.5
+        image_out2[i][j]= ((tsumx*tsumx)+(tsumy*tsumy))**0.5
         theta = math.atan2(tsumy, tsumx)
-        image_out3[i][j] = (math.ceil(theta * (5.0 / 3.1415)) + 5) % 5   #angle quantization 
+        image_out3[i][j] =(math.ceil(theta * (5.0 / 3.1415)) + 5) % 5   #angle quantization 
 
 
 def nonmaxima(image,imageQ):
@@ -210,7 +210,7 @@ def thres(image):
                 
     
     
-image =np.array(cv2.imread('test.jpg',cv2.IMREAD_GRAYSCALE))
+image =np.array(cv2.imread('Test2.jpg',cv2.IMREAD_GRAYSCALE))
  
  # Create the data array - usually initialized some other way
 threadsperblock = (32, 32)
@@ -253,6 +253,7 @@ gradient_cuda[blockspergrid, threadsperblock](dev_gaussian_out, dev_image_out_gr
              dev_image_out_angle, np.array([[-1,0,1],[-2,0,2],[-1,0,1]]),
              np.array([[-1,-2,-1],[0,0,0],[1,2,1]]))
 #Transfer output to host
+#cuda.synchronize()
 image_out_grad = dev_image_out_grad.copy_to_host()
 image_out_angle = dev_image_out_angle.copy_to_host()
 
@@ -279,5 +280,5 @@ print(end-start)
 
 #cv2.imwrite('gaussianoutput.jpg' , gaussian_out)
 cv2.imwrite('output.jpg' , image_out_grad)
-cv2.imwrite('nonmaxima.jpg',nonmaxima_img)
+#cv2.imwrite('nonmaxima.jpg',nonmaxima_img)
 cv2.imwrite('Final.jpg',edgeimg)
