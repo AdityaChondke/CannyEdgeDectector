@@ -1,4 +1,3 @@
-
 import numpy as np
 import cv2
 from numba import jit,double,cuda
@@ -6,7 +5,7 @@ import time
 import math
 
 
-limit = 50#input("Input image threshold for edge detector(Higher=less sensitive):")
+limit = 30#input("Input image threshold for edge detector(Higher=less sensitive):")
 int_limit = int(limit)
 
 
@@ -138,6 +137,31 @@ def nonmaxima(image,imageQ):
     
             
     return image_out_nmax
+
+@cuda.jit
+def nonmaxima_cuda(image,imagea,image_out_nmax):
+    (h,w)=image.shape
+    i, j = cuda.grid(2)
+    if 0 <= i and i< h and 0<=j and j<w:   
+            if(i==0 or i==h-1 or j==0 or j==w-1 ):
+                image_out_nmax[i][j]=0
+                
+            
+            tq=(imagea[i][j])%4
+            if(tq==0):
+                if(image[i,j]<=image[i,j-1] or image[i,j]<=image[i, j+1]):
+                    image_out_nmax[i][j]=0
+            if(tq==1):
+                if(image[i,j]<=image[i-1,j+1] or image[i,j]<=image[i+1,j-1]):
+                    image_out_nmax[i][j]=0
+            if(tq==2):
+                if(image[i,j]<=image[i-1,j] or image[i,j]<=image[i+1,j]):
+                    image_out_nmax[i][j]=0
+            if(tq == 3):
+                if(image[i, j] <= image[i-1, j-1] or image[i, j] <= image[i+1, j+1]):
+                    image_out_nmax[i][j]=0
+    
+            
     
 
 
@@ -210,7 +234,7 @@ def thres(image):
                 
     
     
-image =np.array(cv2.imread('Test2.jpg',cv2.IMREAD_GRAYSCALE))
+image =np.array(cv2.imread('400k.jpg',cv2.IMREAD_GRAYSCALE))
  
  # Create the data array - usually initialized some other way
 threadsperblock = (32, 32)
@@ -257,11 +281,15 @@ gradient_cuda[blockspergrid, threadsperblock](dev_gaussian_out, dev_image_out_gr
 image_out_grad = dev_image_out_grad.copy_to_host()
 image_out_angle = dev_image_out_angle.copy_to_host()
 
-###############################################################################
+#dev_image_out_nmax = cuda.device_array(image.shape)
+#nonmaxima_cuda[blockspergrid, threadsperblock](dev_image_out_grad,
+#             dev_image_out_angle, 
+#             dev_image_out_nmax)
+#nonmaxima_img = dev_image_out_nmax.copy_to_host()
+#
+end=time.time()
 
-#gaussian_out=gaussian_fast(image)
-
-#(image_out_grad,image_out_angle)=gradient_fast(gaussian_out) 
+print(end-start)
 
 nonmaxima_img=nonmaxima_fast(image_out_grad,image_out_angle)
 
@@ -271,14 +299,35 @@ nonmaxima_img=nonmaxima_fast(image_out_grad,image_out_angle)
 
 edgeimg=extendedge_fast(currentp,image_final,threshold)
 
-end=time.time()
+end2=time.time()
+#
+print(end2-start)
+###############################################################################
 
-print(end-start)
+#gaussian_out=gaussian_fast(image)
+#
+#(image_out_grad,image_out_angle)=gradient_fast(gaussian_out) 
+#
+#end=time.time()
+#
+#print(end-start)
+#
+#nonmaxima_img=nonmaxima_fast(image_out_grad,image_out_angle)
+#
+#(threshold,strong)=thres_fast(nonmaxima_img)
+#
+#(currentp,image_final)=hysteresis_fast(strong,threshold)
+#
+#edgeimg=extendedge_fast(currentp,image_final,threshold)
+#
+##end=time.time()
+##
+##print(end-start)
  
 
 
 
 #cv2.imwrite('gaussianoutput.jpg' , gaussian_out)
 cv2.imwrite('output.jpg' , image_out_grad)
-#cv2.imwrite('nonmaxima.jpg',nonmaxima_img)
+cv2.imwrite('nonmaxima.jpg',nonmaxima_img)
 cv2.imwrite('Final.jpg',edgeimg)
