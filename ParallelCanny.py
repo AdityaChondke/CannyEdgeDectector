@@ -1,14 +1,17 @@
 
-
 import numpy as np
 import cv2
-from numba import jit,double
+from numba import jit,double,cuda
 import time
 import math
+import cmath
 
 
 limit = input("Input image threshold for edge detector(Higher=less sensitive):")
 int_limit = int(limit)
+
+
+
 
 def gaussian(image):
     fil=np.array([[1/16,1/8,1/16],[1/8,1/4,1/8],[1/16,1/8,1/16]])
@@ -64,9 +67,35 @@ def gradient(image):
         image_out2[i][j]=math.sqrt((tsumx*tsumx)+(tsumy*tsumy))
         theta = np.arctan2(tsumy, tsumx)
         image_out3[i][j] = (np.round(theta * (5.0 / np.pi)) + 5) % 5   #angle quantization 
-   
+        
     return (image_out2,image_out3)
 
+@cuda.jit
+def gradient_cuda(image, image_out2, image_out3, gx, gy):
+    # image_out2 = np.array(image.copy())
+    # image_out3 = np.array(image.copy())
+    
+#    gx=([[-1,0,1],[-2,0,2],[-1,0,1]])
+#    gy=([[-1,0,1] [-2,0,2] [-1,0,1]])
+
+    (h,w) = image.shape
+    (hf,wf)=(3,3)
+   
+    hf2=hf//2
+    wf2=wf//2
+    i, j = cuda.grid(2)
+    if hf2 <= i and i<= h-hf2 and wf2<=j and j<=w-wf2:
+        tsumx=0.0
+        tsumy=0.0
+        for ii in range(hf):
+            for jj in range(wf):
+                tsumx=tsumx+(image[i-hf2+ii,j-wf2+jj]*gx[hf-1-ii,wf-1-jj])
+                tsumy=tsumy+(image[i-hf2+ii,j-wf2+jj]*gy[hf-1-ii,wf-1-jj])
+        
+                
+        image_out2[i][j]=((tsumx*tsumx)+(tsumy*tsumy))**0.5
+        theta = math.atan2(tsumy, tsumx)
+        image_out3[i][j] = (math.ceil(theta * (5.0 / 3.1415)) + 5) % 5   #angle quantization 
 
 
 def nonmaxima(image,imageQ):
@@ -169,14 +198,16 @@ def thres(image):
                 
     
     
+image =np.array(cv2.imread('test.jpg',cv2.IMREAD_GRAYSCALE))
  
-    
-    
-image =np.array(cv2.imread('Image path',cv2.IMREAD_GRAYSCALE))
-
-
+ # Create the data array - usually initialized some other way
+threadsperblock = (16, 16)
+blockspergrid_x = int(math.ceil(image.shape[0] / threadsperblock[0]))
+blockspergrid_y = int(math.ceil(image.shape[1] / threadsperblock[1]))
+blockspergrid = (blockspergrid_x, blockspergrid_y)
 
 gaussian_fast = jit(double[:,:](double[:,:]))(gaussian)
+
 
 gradient_fast = jit(double[:,:](double[:,:]))(gradient)
 
@@ -194,8 +225,19 @@ start=time.time()
 
 gaussian_out=gaussian_fast(image)
 
-(image_out_grad,image_out_angle)=gradient_fast(gaussian_out) 
- 
+dev_gaussian_out    = cuda.to_device(gaussian_out)
+dev_image_out_grad  = cuda.device_array(gaussian_out.shape)
+dev_image_out_angle = cuda.device_array(gaussian_out.shape) 
+#(image_out_grad,image_out_angle)=gradient_fast(gaussian_out) 
+
+gradient_cuda[blockspergrid, threadsperblock](dev_gaussian_out, dev_image_out_grad, 
+             dev_image_out_angle, np.array([[-1,0,1],[-2,0,2],[-1,0,1]]),
+             np.array([[-1,-2,-1],[0,0,0],[1,2,1]]))
+#    gy=([[-1,0,1] [-2,0,2] [-1,0,1]]))))
+
+image_out_grad = dev_image_out_grad.copy_to_host()
+image_out_angle = dev_image_out_angle.copy_to_host()
+
 nonmaxima_img=nonmaxima_fast(image_out_grad,image_out_angle)
 
 (threshold,strong)=thres_fast(nonmaxima_img)
@@ -211,10 +253,7 @@ print(end-start)
 
 
 
-cv2.imwrite('Path for gaussian output' , gaussian_out)
-cv2.imwrite('Path for sobel output' , image_out_grad)
-cv2.imwrite('Path for nonmaxima supressed output',nonmaxima_img)
-cv2.imwrite('Output image path',edgeimg)
-
-
-
+cv2.imwrite('gaussianoutput.jpg' , gaussian_out)
+cv2.imwrite('output.jpg' , image_out_grad)
+# cv2.imwrite('Path for nonmaxima supressed output',nonmaxima_img)
+# cv2.imwrite('Output image path',edgeimg)
